@@ -10,7 +10,7 @@ import json
 app = FastAPI()
 
 
-load_dotenv(".env")
+load_dotenv()
 
 @app.get("/decimals/")
 def read_root():
