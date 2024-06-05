@@ -51,7 +51,6 @@ def read_root():
     nonce = w3.eth.get_transaction_count(w3.to_checksum_address(os.environ.get("MINTER_ADDRESS")))
 
     from_address = Account.from_key(private_key).address
-    print(from_address)
 
     transaction = {
         'from': from_address,
@@ -59,13 +58,7 @@ def read_root():
         'nonce': nonce,
     }
 
-    print(transaction)
-
     tx = contrtact.functions.mintWithNativeToken().build_transaction(transaction)
-
-    print("tx:", tx)
-
     signed_tx = w3.eth.account.sign_transaction(tx, private_key=private_key)
     tx_hash = w3.eth.send_raw_transaction(signed_tx.rawTransaction)
-
     return {"tx_hash": tx_hash.hex()}
