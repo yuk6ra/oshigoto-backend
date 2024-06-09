@@ -239,5 +239,6 @@ def read_root(username: str):
         "token_id": tokenID,
         "username": username,
         "salt": salt.hex(),
-        "wallet_address": result    
+        "tba_wallet_address": result,
+        "main_wallet_address": minter_address, 
     }
