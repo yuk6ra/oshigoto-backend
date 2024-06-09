@@ -62,3 +62,22 @@ def read_root():
     signed_tx = w3.eth.account.sign_transaction(tx, private_key=private_key)
     tx_hash = w3.eth.send_raw_transaction(signed_tx.rawTransaction)
     return {"tx_hash": tx_hash.hex()}
+
+
+@app.get("/wallets/:username")
+def read_root(username: str):
+
+    w3 = Web3(Web3.HTTPProvider(os.environ.get("PROVIDER_URL")))
+    contract_address = os.environ.get("CONTRACT_ADDRESS_ERC6551_REGISTRY")
+    add = w3.to_checksum_address(os.environ.get("CONTRACT_ADDRESS"))
+
+    # convert username to bytes32
+    salt = w3.solidity_keccak(["string"], [username])
+
+    with open("./assets/abi/erc6551registry.json") as f:
+        abi = json.load(f)["result"]
+
+    print(add)
+    contrtact = w3.eth.contract(address=contract_address, abi=abi)
+    result = contrtact.functions.account(add,salt,12,add,1).call()
+    return {"result": result}
