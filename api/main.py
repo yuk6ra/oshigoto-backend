@@ -19,7 +19,7 @@ def read_root():
     w3 = Web3(Web3.HTTPProvider(os.environ.get("PROVIDER_URL")))
     contract_address = os.environ.get("CONTRACT_ADDRESS_OSHIGOTO_TOKEN")
 
-    with open("./assets/abi/sample.json") as f:
+    with open("./assets/abi/oshigoto-token.json") as f:
         abi = json.load(f)["result"]
 
     contrtact = w3.eth.contract(address=contract_address, abi=abi)
@@ -32,7 +32,7 @@ def read_root():
     w3 = Web3(Web3.HTTPProvider(os.environ.get("PROVIDER_URL")))
     contract_address = os.environ.get("CONTRACT_ADDRESS_OSHIGOTO_TOKEN")
 
-    with open("./assets/abi/sample.json") as f:
+    with open("./assets/abi/oshigoto-token.json") as f:
         abi = json.load(f)["result"]
 
     contrtact = w3.eth.contract(address=contract_address, abi=abi)
@@ -45,7 +45,7 @@ def read_root():
     w3 = Web3(Web3.HTTPProvider(os.environ.get("PROVIDER_URL")))
     contract_address = os.environ.get("CONTRACT_ADDRESS_OSHIGOTO_TOKEN")
 
-    with open("./assets/abi/sample.json") as f:
+    with open("./assets/abi/oshigoto-token.json") as f:
         abi = json.load(f)["result"]
 
     contrtact = w3.eth.contract(address=contract_address, abi=abi)
@@ -54,12 +54,12 @@ def read_root():
     return {"result": result}
 
 @app.post("/mint/oshigototoken/native/")
-def read_root():   
+def mint_by_native(to: str):
     w3 = Web3(Web3.HTTPProvider(os.environ.get("PROVIDER_URL")))
     contract_address = os.environ.get("CONTRACT_ADDRESS_OSHIGOTO_TOKEN")
     private_key = os.environ.get("PRIVATE_KEY")
 
-    with open("./assets/abi/sample.json") as f:
+    with open("./assets/abi/oshigoto-token.json") as f:
         abi = json.load(f)["result"]
 
     contrtact = w3.eth.contract(address=contract_address, abi=abi)
@@ -73,18 +73,19 @@ def read_root():
         'nonce': nonce,
     }
 
-    tx = contrtact.functions.mintWithNativeToken().build_transaction(transaction)
+
+    tx = contrtact.functions.mintWithNativeToken(w3.to_checksum_address(to)).build_transaction(transaction)
     signed_tx = w3.eth.account.sign_transaction(tx, private_key=private_key)
     tx_hash = w3.eth.send_raw_transaction(signed_tx.rawTransaction)
     return {"tx_hash": tx_hash.hex()}
 
 @app.post("/mint/oshigototoken/erc20/")
-def read_root():
+def mint_by_erc20(to: str):
     w3 = Web3(Web3.HTTPProvider(os.environ.get("PROVIDER_URL")))
     contract_address = os.environ.get("CONTRACT_ADDRESS_OSHIGOTO_TOKEN")
     private_key = os.environ.get("PRIVATE_KEY")
 
-    with open("./assets/abi/sample.json") as f:
+    with open("./assets/abi/oshigoto-token.json") as f:
         abi = json.load(f)["result"]
 
     contrtact = w3.eth.contract(address=contract_address, abi=abi)
@@ -97,7 +98,7 @@ def read_root():
         'nonce': nonce,
     }
 
-    tx = contrtact.functions.mintWithERC20Token().build_transaction(transaction)
+    tx = contrtact.functions.mintWithERC20Token(w3.to_checksum_address(to)).build_transaction(transaction)
     signed_tx = w3.eth.account.sign_transaction(tx, private_key=private_key)
     tx_hash = w3.eth.send_raw_transaction(signed_tx.rawTransaction)
     return {"tx_hash": tx_hash.hex()}
@@ -141,7 +142,7 @@ def read_wallet():
     native = w3.eth.get_balance(target_address)
     native_balance = int(native) / 10**18
 
-    with open("./assets/abi/sample.json") as f:
+    with open("./assets/abi/oshigoto-token.json") as f:
         abi = json.load(f)["result"]
     
     oshigoto_contract_address = os.environ.get("CONTRACT_ADDRESS_OSHIGOTO_TOKEN")
@@ -152,7 +153,30 @@ def read_wallet():
     return {
         "native_token": native_balance,
         "check_coin": erc20_balance,
-        "oshigoto_token": oshigoto_balance
+    }
+
+
+@app.get("/tba_wallets/{wallet_address}")
+def read_wallet(wallet_address: str):
+    w3 = Web3(Web3.HTTPProvider(os.environ.get("PROVIDER_URL")))
+    mirror_contract_address = os.environ.get("CONTRACT_ADDRESS_MIRROR_NFT")
+
+    with open("./assets/abi/mirror-nft.json") as f:
+        abi = json.load(f)["result"]
+    mirror = w3.eth.contract(address=mirror_contract_address, abi=abi)
+    nft_balance = mirror.functions.balanceOf(w3.to_checksum_address(wallet_address)).call()
+
+    with open("./assets/abi/oshigoto-token.json") as f:
+        abi = json.load(f)["result"]
+
+    oshigoto_contract_address = os.environ.get("CONTRACT_ADDRESS_OSHIGOTO_TOKEN")
+    oshigoto_contract = w3.eth.contract(address=oshigoto_contract_address, abi=abi)
+    oshigoto = oshigoto_contract.functions.balanceOf(w3.to_checksum_address(wallet_address)).call()
+    oshigoto_balance = int(oshigoto) / 10**18
+    
+    return {
+        "oshigoto_token_erc721": nft_balance,
+        "oshigoto_token_erc20": oshigoto_balance,
     }
 
 @app.post("/memberships/alice")
