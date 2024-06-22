@@ -4,15 +4,28 @@ from web3 import Web3, AsyncWeb3
 from eth_account import Account
 
 from dotenv import load_dotenv
+import datetime
 import os
 import json
+import base64
+
+from models.model import MaterialBody
 
 app = FastAPI()
-
-
 load_dotenv()
 
 CHAIN_ID = int(os.environ.get("CHAIN_ID"))
+
+
+w3 = Web3(Web3.HTTPProvider(os.environ.get("PROVIDER_URL")))
+alice_membership_contract_address = os.environ.get("CONTRACT_ADDRESS_ALICE_MEMBERSHIP")
+with open("./assets/abi/membership.json") as f:
+    abi = json.load(f)["result"]
+
+alice_membership_contrtact = w3.eth.contract(address=alice_membership_contract_address, abi=abi)
+material_contract_address = os.environ.get("CONTRACT_ADDRESS_MIRROR_NFT")
+user_private_key = os.environ.get("PRIVATE_KEY")
+
 
 @app.get("/decimals/")
 def read_root():
@@ -53,53 +66,41 @@ def read_root():
 
     return {"result": result}
 
-@app.post("/mint/oshigototoken/native/")
-def mint_by_native(to: str):
-    w3 = Web3(Web3.HTTPProvider(os.environ.get("PROVIDER_URL")))
-    contract_address = os.environ.get("CONTRACT_ADDRESS_OSHIGOTO_TOKEN")
-    private_key = os.environ.get("PRIVATE_KEY")
+oshigototoken_contract_address = os.environ.get("CONTRACT_ADDRESS_OSHIGOTO_TOKEN")
+with open("./assets/abi/oshigoto-token.json") as f:
+    abi = json.load(f)["result"]
 
-    with open("./assets/abi/oshigoto-token.json") as f:
-        abi = json.load(f)["result"]
+oshigototoken_contrtact = w3.eth.contract(address=oshigototoken_contract_address, abi=abi)
 
-    contrtact = w3.eth.contract(address=contract_address, abi=abi)
-    nonce = w3.eth.get_transaction_count(w3.to_checksum_address(os.environ.get("MINTER_ADDRESS")))
+@app.post("/oshigototoken/mint/native/")
+def mint_oshigototoken():
 
-    from_address = Account.from_key(private_key).address
+    user_address = Account.from_key(user_private_key).address
+    nonce = w3.eth.get_transaction_count(w3.to_checksum_address(user_address))
 
     transaction = {
-        'from': from_address,
+        'from': user_address,
         'value': 100000000000000,
         'nonce': nonce,
     }
 
-
-    tx = contrtact.functions.mintWithNativeToken(w3.to_checksum_address(to)).build_transaction(transaction)
-    signed_tx = w3.eth.account.sign_transaction(tx, private_key=private_key)
+    tx = oshigototoken_contrtact.functions.mintWithNativeToken(w3.to_checksum_address(user_address)).build_transaction(transaction)
+    signed_tx = w3.eth.account.sign_transaction(tx, private_key=user_private_key)
     tx_hash = w3.eth.send_raw_transaction(signed_tx.rawTransaction)
     return {"tx_hash": tx_hash.hex()}
 
-@app.post("/mint/oshigototoken/erc20/")
-def mint_by_erc20(to: str):
-    w3 = Web3(Web3.HTTPProvider(os.environ.get("PROVIDER_URL")))
-    contract_address = os.environ.get("CONTRACT_ADDRESS_OSHIGOTO_TOKEN")
-    private_key = os.environ.get("PRIVATE_KEY")
-
-    with open("./assets/abi/oshigoto-token.json") as f:
-        abi = json.load(f)["result"]
-
-    contrtact = w3.eth.contract(address=contract_address, abi=abi)
-    nonce = w3.eth.get_transaction_count(w3.to_checksum_address(os.environ.get("MINTER_ADDRESS")))
-
-    from_address = Account.from_key(private_key).address
+@app.post("/oshigototoken/mint/erc20/")
+def mint_oshigototoken_by_erc20():
+    user_address = Account.from_key(user_private_key).address
+    nonce = w3.eth.get_transaction_count(w3.to_checksum_address(user_address))
 
     transaction = {
-        'from': from_address,
+        'from': user_address,
         'nonce': nonce,
     }
 
-    tx = contrtact.functions.mintWithERC20Token(w3.to_checksum_address(to)).build_transaction(transaction)
-    signed_tx = w3.eth.account.sign_transaction(tx, private_key=private_key)
+    tx = oshigototoken_contrtact.functions.mintWithERC20Token(w3.to_checksum_address(user_address)).build_transaction(transaction)
+    signed_tx = w3.eth.account.sign_transaction(tx, private_key=user_private_key)
     tx_hash = w3.eth.send_raw_transaction(signed_tx.rawTransaction)
     return {"tx_hash": tx_hash.hex()}
 
@@ -179,35 +180,6 @@ def read_wallet(wallet_address: str):
         "oshigoto_token_erc20": oshigoto_balance,
     }
 
-@app.post("/memberships/alice")
-def mint_memberships():
-    w3 = Web3(Web3.HTTPProvider(os.environ.get("PROVIDER_URL")))
-    contract_address = os.environ.get("CONTRACT_ADDRESS_ALICE_MEMBERSHIP")
-
-    private_key = os.environ.get("PRIVATE_KEY")
-
-    with open("./assets/abi/membership.json") as f:
-        abi = json.load(f)["result"]
-
-    contract = w3.eth.contract(address=contract_address, abi=abi)
-    account = Account.from_key(private_key)
-    from_address = w3.to_checksum_address(account.address)
-    nonce = w3.eth.get_transaction_count(from_address)
-
-    transaction = contract.functions.mintMembership().build_transaction({
-        'gas': 200000,  # Estimate gas limit
-        'gasPrice': w3.to_wei('10', 'gwei'),  # Estimate gas price
-        'nonce': nonce,
-    })
-
-    signed_txn = w3.eth.account.sign_transaction(transaction, private_key)
-    tx_hash = w3.eth.send_raw_transaction(signed_txn.rawTransaction)
-
-    return {
-        "from": from_address,
-        "tx_hash": tx_hash.hex(),
-    }
-
 @app.get("/wallets/")
 def read_root(username: str):
 
@@ -241,4 +213,67 @@ def read_root(username: str):
         "salt": salt.hex(),
         "tba_wallet_address": result,
         "main_wallet_address": minter_address, 
+    }
+
+@app.get("/membership/{token_id}")
+def get_membership(token_id: int):
+    config = alice_membership_contrtact.functions.membershipConfigs(token_id).call()
+    tokenURI = alice_membership_contrtact.functions.tokenURI(token_id).call()
+
+    # base64 -> json
+    metadata = json.loads(base64.b64decode(tokenURI.split(",")[1]))
+
+    # unix timestamp to datetime
+    last_burned = datetime.datetime.fromtimestamp(config[1])
+
+    return {
+        "token_id": token_id,
+        "name": metadata["name"],
+        "image": metadata["image"],
+        "burn_point": config[0],
+        "last_burned": last_burned,
+    }
+
+@app.post("/memberships/alice")
+def mint_memberships():
+    account = Account.from_key(user_private_key)
+    from_address = w3.to_checksum_address(account.address)
+    nonce = w3.eth.get_transaction_count(from_address)
+
+    transaction = alice_membership_contrtact.functions.mintMembership().build_transaction({
+        'gas': 200000,  # Estimate gas limit
+        'gasPrice': w3.to_wei('10', 'gwei'),  # Estimate gas price
+        'nonce': nonce,
+    })
+
+    signed_txn = w3.eth.account.sign_transaction(transaction, user_private_key)
+    tx_hash = w3.eth.send_raw_transaction(signed_txn.rawTransaction)
+
+    return {
+        "from": from_address,
+        "tx_hash": tx_hash.hex(),
+    }
+
+@app.post("/memberships/levelup/{token_id}")
+def levelup_memberships(token_id: int, material_body: MaterialBody):
+    account = Account.from_key(user_private_key)
+    from_address = w3.to_checksum_address(account.address)
+    nonce = w3.eth.get_transaction_count(from_address)
+
+    transaction = alice_membership_contrtact.functions.levelUp(
+        token_id,
+        material_body.material_token_id,
+        material_body.material_contract_address,
+    ).build_transaction({
+        'gas': 200000,  # Estimate gas limit
+        'gasPrice': w3.to_wei('10', 'gwei'),  # Estimate gas price
+        'nonce': nonce,
+    })
+
+    signed_txn = w3.eth.account.sign_transaction(transaction, user_private_key)
+    tx_hash = w3.eth.send_raw_transaction(signed_txn.rawTransaction)
+
+    return {
+        "from": from_address,
+        "tx_hash": tx_hash.hex(),
     }
