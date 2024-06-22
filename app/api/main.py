@@ -1,6 +1,6 @@
 from typing import Union
 from fastapi import FastAPI
-from web3 import Web3, AsyncWeb3
+from web3 import Web3, AsyncWeb3, contract
 from eth_account import Account
 
 from dotenv import load_dotenv
@@ -16,61 +16,36 @@ load_dotenv()
 
 CHAIN_ID = int(os.environ.get("CHAIN_ID"))
 
-
 w3 = Web3(Web3.HTTPProvider(os.environ.get("PROVIDER_URL")))
-alice_membership_contract_address = os.environ.get("CONTRACT_ADDRESS_ALICE_MEMBERSHIP")
-with open("./assets/abi/membership.json") as f:
-    abi = json.load(f)["result"]
 
-alice_membership_contrtact = w3.eth.contract(address=alice_membership_contract_address, abi=abi)
+# Contract address
+membership_contract_address = os.environ.get("CONTRACT_ADDRESS_ALICE_MEMBERSHIP")
 material_contract_address = os.environ.get("CONTRACT_ADDRESS_MIRROR_NFT")
+oshigototoken_contract_address = os.environ.get("CONTRACT_ADDRESS_OSHIGOTO_TOKEN")
+checkcoin_contract_address = os.environ.get("CONTRACT_ADDRESS_CHECK_COIN")
+
+# Private key
 user_private_key = os.environ.get("PRIVATE_KEY")
 
+def load_contract(address: str, json_filename: str) -> contract.Contract:
+    try:
+        with open(f"./assets/abi/{json_filename}", 'r') as f:
+            abi = json.load(f)["result"]
+        return w3.eth.contract(address=address, abi=abi)
+    except FileNotFoundError:
+        raise FileNotFoundError(f"ABI file {json_filename} not found")
+    except json.JSONDecodeError:
+        raise ValueError(f"Error decoding ABI file {json_filename}")
 
-@app.get("/decimals/")
-def read_root():
-    w3 = Web3(Web3.HTTPProvider(os.environ.get("PROVIDER_URL")))
-    contract_address = os.environ.get("CONTRACT_ADDRESS_OSHIGOTO_TOKEN")
+contracts = {
+    "membership": ("membership.json", membership_contract_address),
+    "mirror": ("mirror-nft.json", material_contract_address),
+    "oshigoto_token": ("oshigoto-token.json", oshigototoken_contract_address),
+    "check_coin": ("erc20.json", checkcoin_contract_address),
+    "erc6551_registry": ("erc6551registry.json", os.environ.get("CONTRACT_ADDRESS_ERC6551_REGISTRY")),
+}
 
-    with open("./assets/abi/oshigoto-token.json") as f:
-        abi = json.load(f)["result"]
-
-    contrtact = w3.eth.contract(address=contract_address, abi=abi)
-    result = contrtact.functions.decimals().call()
-
-    return {"result": result}
-
-@app.get("/name/")
-def read_root():
-    w3 = Web3(Web3.HTTPProvider(os.environ.get("PROVIDER_URL")))
-    contract_address = os.environ.get("CONTRACT_ADDRESS_OSHIGOTO_TOKEN")
-
-    with open("./assets/abi/oshigoto-token.json") as f:
-        abi = json.load(f)["result"]
-
-    contrtact = w3.eth.contract(address=contract_address, abi=abi)
-    result = contrtact.functions.name().call()
-
-    return {"result": result}
-
-@app.get("/totalsupply/")
-def read_root():
-    w3 = Web3(Web3.HTTPProvider(os.environ.get("PROVIDER_URL")))
-    contract_address = os.environ.get("CONTRACT_ADDRESS_OSHIGOTO_TOKEN")
-
-    with open("./assets/abi/oshigoto-token.json") as f:
-        abi = json.load(f)["result"]
-
-    contrtact = w3.eth.contract(address=contract_address, abi=abi)
-    result = contrtact.functions.totalSupply().call()
-
-    return {"result": result}
-
-oshigototoken_contract_address = os.environ.get("CONTRACT_ADDRESS_OSHIGOTO_TOKEN")
-with open("./assets/abi/oshigoto-token.json") as f:
-    abi = json.load(f)["result"]
-
-oshigototoken_contrtact = w3.eth.contract(address=oshigototoken_contract_address, abi=abi)
+loaded_contracts = {name: load_contract(addr, json_file) for name, (json_file, addr) in contracts.items()}
 
 @app.post("/oshigototoken/mint/native/")
 def mint_oshigototoken():
