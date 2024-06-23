@@ -8,6 +8,7 @@ import datetime
 import os
 import json
 import base64
+import re
 
 from models.model import MaterialBody
 
@@ -213,11 +214,17 @@ def get_mirror_nft(token_id: int):
     mirror_contract = loaded_contracts.get("mirror_nft")
     oshigoto_token_contract = loaded_contracts.get("oshigoto_token")
     
-    token_uri = mirror_contract.functions.tokenURI(token_id).call()
-    metadata = json.loads(base64.b64decode(token_uri.split(",")[1]))
+    try:
+        token_uri = mirror_contract.functions.tokenURI(token_id).call()
+    except:
+        return {
+            "error": "Token not found"
+        }
 
+    match = re.search(r'data:application/json;utf8,(.*)', token_uri)
+    metadata = json.loads(match.group(1))
+    
     rank = oshigoto_token_contract.functions.rankOf(token_id).call()
-
     return {
         "name": metadata["name"],
         "image": metadata["image"],
