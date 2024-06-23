@@ -205,7 +205,7 @@ def mint_memberships():
 
     transaction = membership_contrtact.functions.mintMembership().build_transaction({
         'gas': 200000,  # Estimate gas limit
-        'gasPrice': w3.to_wei('10', 'gwei'),  # Estimate gas price
+        'gasPrice': w3.to_wei('50', 'gwei'),  # Estimate gas price
         'nonce': nonce,
     })
 
@@ -258,7 +258,7 @@ def levelup_memberships(material_token_id: int):
         material_contract_address,
     ).build_transaction({
         'gas': 200000,  # Estimate gas limit
-        'gasPrice': w3.to_wei('10', 'gwei'),  # Estimate gas price
+        'gasPrice': w3.to_wei('50', 'gwei'),  # Estimate gas price
         'nonce': nonce,
     })
 
@@ -275,8 +275,6 @@ def mint_metalive_poap(username: str, nft_name: str):
     metalive_poap_contract = loaded_contracts.get("metalive_poap")
     nonce = w3.eth.get_transaction_count(owner_address)
 
-    print(owner_address)
-
     # TBA Wallet
     salt = w3.solidity_keccak(["string"], [username])  
     membership_contract = loaded_contracts.get("oshigoto_membership")
@@ -292,7 +290,7 @@ def mint_metalive_poap(username: str, nft_name: str):
     ).build_transaction({
         'from': owner_address,
         'gas': 2000000,  # Estimate gas limit
-        'gasPrice': w3.to_wei('10', 'gwei'),  # Estimate gas price
+        'gasPrice': w3.to_wei('50', 'gwei'),  # Estimate gas price
         'nonce': nonce,
     })
 
@@ -321,30 +319,30 @@ def mint_goods(goods_type: str, username: str):
     print(tba_address)
 
     # Approve
-    transaction = oshigoto_token_contract.functions.approve(oshigoto_goods_contract.address, oshigoto_token_contract.balanceOf(user_address)).build_transaction({
-        'gas': 200000,  # Estimate gas limit
-        'gasPrice': w3.to_wei('10', 'gwei'),  # Estimate gas price
-        'nonce': nonce,
-    })
+    # transaction = oshigoto_token_contract.functions.approve(oshigoto_goods_contract.address, oshigoto_token_contract.balanceOf(user_address)).build_transaction({
+    #     'gas': 200000,  # Estimate gas limit
+    #     'gasPrice': w3.to_wei('10', 'gwei'),  # Estimate gas price
+    #     'nonce': nonce,
+    # })
 
     # Mint goods
     if goods_type == "a":
         transaction = oshigoto_goods_contract.functions.purchaseGoodsA(tba_address).build_transaction({
             'gas': 200000,  # Estimate gas limit
-            'gasPrice': w3.to_wei('10', 'gwei'),  # Estimate gas price
+            'gasPrice': w3.to_wei('50', 'gwei'),  # Estimate gas price
             'nonce': nonce,
         })
     elif goods_type == "b":
         transaction = oshigoto_goods_contract.functions.purchaseGoodsB(tba_address).build_transaction({
             'gas': 200000,  # Estimate gas limit
-            'gasPrice': w3.to_wei('10', 'gwei'),  # Estimate gas price
+            'gasPrice': w3.to_wei('50', 'gwei'),  # Estimate gas price
             'nonce': nonce,
         })
 
     elif goods_type == "c":
         transaction = oshigoto_goods_contract.functions.purchaseGoodsC(tba_address).build_transaction({
             'gas': 200000,  # Estimate gas limit
-            'gasPrice': w3.to_wei('10', 'gwei'),  # Estimate gas price
+            'gasPrice': w3.to_wei('50', 'gwei'),  # Estimate gas price
             'nonce': nonce,
         })
     else:
