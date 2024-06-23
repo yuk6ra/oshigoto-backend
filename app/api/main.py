@@ -170,6 +170,8 @@ def read_root(username: str):
 def get_membership():
     membership_contract = loaded_contracts.get("oshigoto_membership")
     oshigoto_membership_contract = loaded_contracts.get("oshigoto_membership")
+    mirror_nft_contract = loaded_contracts.get("mirror_nft")
+    oshigoto_token_contract = loaded_contracts.get("oshigoto_token")
 
     membership_token_id = membership_contract.functions.getTokenIdFromAddress(user_address).call()
 
@@ -179,15 +181,21 @@ def get_membership():
     # base64 -> json
     metadata = json.loads(base64.b64decode(tokenURI.split(",")[1]))
 
-    # unix timestamp to datetime
-    last_burned = datetime.datetime.fromtimestamp(config[1])
+    # # unix timestamp to datetime
+    # last_burned = datetime.datetime.fromtimestamp()
+
+    oshigoto_721_balance = mirror_nft_contract.functions.balanceOf(user_address).call()
+    oshigoto_20_balance_of = oshigoto_token_contract.functions.balanceOf(user_address).call()
+    oshigoto_20_blance = int(oshigoto_20_balance_of) / 10**18
 
     return {
         "token_id": membership_token_id,
         "name": metadata["name"],
         "image": metadata["image"],
         "burn_point": config[0],
-        "last_burned": last_burned,
+        "last_burned": config[1],
+        "oshigoto_20_balance": oshigoto_20_blance,
+        "oshigoto_721_balance": oshigoto_721_balance,
     }
 
 @app.post("/memberships/alice")
@@ -223,25 +231,30 @@ def get_mirror_nft(token_id: int):
 
     match = re.search(r'data:application/json;utf8,(.*)', token_uri)
     metadata = json.loads(match.group(1))
-    
+
     rank = oshigoto_token_contract.functions.rankOf(token_id).call()
+    owner = mirror_contract.functions.ownerOf(token_id).call()
     return {
         "name": metadata["name"],
         "image": metadata["image"],
+        "owner_address": owner,
         "rank": rank,
     }
 
-@app.post("/memberships/levelup/{token_id}")
-def levelup_memberships(token_id: int, material_body: MaterialBody):
+@app.post("/memberships/levelup/{material_token_id}")
+def levelup_memberships(material_token_id: int):
 
     oshigoto_membership_contract = loaded_contracts.get("oshigoto_membership")
     material_contract_address = os.environ.get("CONTRACT_ADDRESS_MIRROR_NFT")
 
     nonce = w3.eth.get_transaction_count(user_address)
 
+    # Membership Token ID
+    token_id = oshigoto_membership_contract.functions.getTokenIdFromAddress(user_address).call()
+
     transaction = oshigoto_membership_contract.functions.levelUp(
         token_id,
-        material_body.material_token_id,
+        material_token_id,
         material_contract_address,
     ).build_transaction({
         'gas': 200000,  # Estimate gas limit
@@ -262,6 +275,8 @@ def mint_metalive_poap(username: str, nft_name: str):
     metalive_poap_contract = loaded_contracts.get("metalive_poap")
     nonce = w3.eth.get_transaction_count(owner_address)
 
+    print(owner_address)
+
     # TBA Wallet
     salt = w3.solidity_keccak(["string"], [username])  
     membership_contract = loaded_contracts.get("oshigoto_membership")
@@ -275,6 +290,7 @@ def mint_metalive_poap(username: str, nft_name: str):
         tba_address,
         nft_name,
     ).build_transaction({
+        'from': owner_address,
         'gas': 2000000,  # Estimate gas limit
         'gasPrice': w3.to_wei('10', 'gwei'),  # Estimate gas price
         'nonce': nonce,
