@@ -18,14 +18,12 @@ CHAIN_ID = int(os.environ.get("CHAIN_ID"))
 
 w3 = Web3(Web3.HTTPProvider(os.environ.get("PROVIDER_URL")))
 
-# Contract address
-membership_contract_address = os.environ.get("CONTRACT_ADDRESS_ALICE_MEMBERSHIP")
-material_contract_address = os.environ.get("CONTRACT_ADDRESS_MIRROR_NFT")
-oshigototoken_contract_address = os.environ.get("CONTRACT_ADDRESS_OSHIGOTO_TOKEN")
-checkcoin_contract_address = os.environ.get("CONTRACT_ADDRESS_CHECK_COIN")
-
 # Private key
-user_private_key = os.environ.get("PRIVATE_KEY")
+owner_private_key = os.environ.get("OWNER_PRIVATE_KEY")
+owner_address = Account.from_key(owner_private_key).address
+
+user_private_key = os.environ.get("USER_PRIVATE_KEY")
+user_address = Account.from_key(user_private_key).address
 
 def load_contract(address: str, json_filename: str) -> contract.Contract:
     try:
@@ -38,35 +36,38 @@ def load_contract(address: str, json_filename: str) -> contract.Contract:
         raise ValueError(f"Error decoding ABI file {json_filename}")
 
 contracts = {
-    "membership": ("membership.json", membership_contract_address),
-    "mirror": ("mirror-nft.json", material_contract_address),
-    "oshigoto_token": ("oshigoto-token.json", oshigototoken_contract_address),
-    "check_coin": ("erc20.json", checkcoin_contract_address),
-    "erc6551_registry": ("erc6551registry.json", os.environ.get("CONTRACT_ADDRESS_ERC6551_REGISTRY")),
+    "check_coin": ("check-coin.json", os.environ.get("CONTRACT_ADDRESS_CHECK_COIN")),
+    "erc6551_registry": ("erc6551-registry.json", os.environ.get("CONTRACT_ADDRESS_ERC6551_REGISTRY")),
+    "metalive_poap": ("metalive-poap.json", os.environ.get("CONTRACT_ADDRESS_METALIVE_POAP")),
+    "mirror_nft": ("mirror-nft.json", os.environ.get("CONTRACT_ADDRESS_MIRROR_NFT")),
+    "oshigoto_goods": ("oshigoto-goods.json", os.environ.get("CONTRACT_ADDRESS_OSHIGOTO_GOODS")),
+    "oshigoto_membership": ("oshigoto-membership.json", os.environ.get("CONTRACT_ADDRESS_OSHIGOTO_MEMBERSHIP")),
+    "oshigoto_token": ("oshigoto-token.json", os.environ.get("CONTRACT_ADDRESS_OSHIGOTO_TOKEN")),
 }
 
 loaded_contracts = {name: load_contract(addr, json_file) for name, (json_file, addr) in contracts.items()}
 
 @app.post("/oshigototoken/mint/native/")
 def mint_oshigototoken():
-
-    user_address = Account.from_key(user_private_key).address
     nonce = w3.eth.get_transaction_count(w3.to_checksum_address(user_address))
-
     transaction = {
         'from': user_address,
         'value': 100000000000000,
         'nonce': nonce,
     }
+    oshigototoken_contrtact = loaded_contracts.get("oshigoto_token")
 
     tx = oshigototoken_contrtact.functions.mintWithNativeToken(w3.to_checksum_address(user_address)).build_transaction(transaction)
     signed_tx = w3.eth.account.sign_transaction(tx, private_key=user_private_key)
+
     tx_hash = w3.eth.send_raw_transaction(signed_tx.rawTransaction)
-    return {"tx_hash": tx_hash.hex()}
+    return {
+        "from": user_address,
+        "tx_hash": tx_hash.hex(),
+    }
 
 @app.post("/oshigototoken/mint/erc20/")
 def mint_oshigototoken_by_erc20():
-    user_address = Account.from_key(user_private_key).address
     nonce = w3.eth.get_transaction_count(w3.to_checksum_address(user_address))
 
     transaction = {
@@ -74,126 +75,105 @@ def mint_oshigototoken_by_erc20():
         'nonce': nonce,
     }
 
+    oshigototoken_contrtact = loaded_contracts.get("oshigoto_token")
+
     tx = oshigototoken_contrtact.functions.mintWithERC20Token(w3.to_checksum_address(user_address)).build_transaction(transaction)
     signed_tx = w3.eth.account.sign_transaction(tx, private_key=user_private_key)
     tx_hash = w3.eth.send_raw_transaction(signed_tx.rawTransaction)
-    return {"tx_hash": tx_hash.hex()}
+    return {
+        "from": user_address,
+        "tx_hash": tx_hash.hex(),
+    }
 
-@app.post("/mint/checkcoin/")
+@app.post("/checkcoin/mint/")
 def mint_coin(value: int):
-    w3 = Web3(Web3.HTTPProvider(os.environ.get("PROVIDER_URL")))
-    contract_address = os.environ.get("CONTRACT_ADDRESS_CHECK_COIN")
-    private_key = os.environ.get("PRIVATE_KEY")
 
-    with open("./assets/abi/erc20.json") as f:
-        abi = json.load(f)["result"]
-
-    contrtact = w3.eth.contract(address=contract_address, abi=abi)
-    nonce = w3.eth.get_transaction_count(w3.to_checksum_address(os.environ.get("MINTER_ADDRESS")))
-
-    from_address = Account.from_key(private_key).address
-
+    nonce = w3.eth.get_transaction_count(w3.to_checksum_address(user_address))
     transaction = {
-        'from': from_address,
+        'from': user_address,
         'nonce': nonce,
     }
 
-    tx = contrtact.functions.mint(from_address, value).build_transaction(transaction)
-    signed_tx = w3.eth.account.sign_transaction(tx, private_key=private_key)
+    checkcoin_contrtact = loaded_contracts.get("check_coin")
+
+    tx = checkcoin_contrtact.functions.mint(user_address, value).build_transaction(transaction)
+    signed_tx = w3.eth.account.sign_transaction(tx, private_key=user_private_key)
     tx_hash = w3.eth.send_raw_transaction(signed_tx.rawTransaction)
     return {"tx_hash": tx_hash.hex()}
 
 @app.get("/main_wallet/status")
 def read_wallet():
-    w3 = Web3(Web3.HTTPProvider(os.environ.get("PROVIDER_URL")))
-    checkcoin_contract_address = os.environ.get("CONTRACT_ADDRESS_CHECK_COIN")
-    target_address = Account.from_key(os.environ.get("PRIVATE_KEY")).address
+    checkcoin_contrtact = loaded_contracts.get("check_coin")
 
-    with open("./assets/abi/erc20.json") as f:
-        abi = json.load(f)["result"]
+    # Check Coin
+    checkcoin_balance_of = checkcoin_contrtact.functions.balanceOf(user_address).call()
+    checkcoin_balance = int(checkcoin_balance_of) / 10**18
 
-    checkcoin_contrtact = w3.eth.contract(address=checkcoin_contract_address, abi=abi)
-    erc20 = checkcoin_contrtact.functions.balanceOf(target_address).call()
-    erc20_balance = int(erc20) / 10**18
-    native = w3.eth.get_balance(target_address)
-    native_balance = int(native) / 10**18
-
-    with open("./assets/abi/oshigoto-token.json") as f:
-        abi = json.load(f)["result"]
-    
-    oshigoto_contract_address = os.environ.get("CONTRACT_ADDRESS_OSHIGOTO_TOKEN")
-    oshigoto_contract = w3.eth.contract(address=oshigoto_contract_address, abi=abi)
-    oshigoto = oshigoto_contract.functions.balanceOf(target_address).call()
-    oshigoto_balance = int(oshigoto) / 10**18
+    # Native Token
+    native_balance_of = w3.eth.get_balance(user_address)
+    native_balance = int(native_balance_of) / 10**18
 
     return {
         "native_token": native_balance,
-        "check_coin": erc20_balance,
+        "check_coin": checkcoin_balance,
     }
 
 
-@app.get("/tba_wallets/{wallet_address}")
-def read_wallet(wallet_address: str):
-    w3 = Web3(Web3.HTTPProvider(os.environ.get("PROVIDER_URL")))
-    mirror_contract_address = os.environ.get("CONTRACT_ADDRESS_MIRROR_NFT")
+# @app.get("/tba_wallet/{wallet_address}")
+# def read_wallet(wallet_address: str):
+#     w3 = Web3(Web3.HTTPProvider(os.environ.get("PROVIDER_URL")))
+#     mirror_contract_address = os.environ.get("CONTRACT_ADDRESS_MIRROR_NFT")
 
-    with open("./assets/abi/mirror-nft.json") as f:
-        abi = json.load(f)["result"]
-    mirror = w3.eth.contract(address=mirror_contract_address, abi=abi)
-    nft_balance = mirror.functions.balanceOf(w3.to_checksum_address(wallet_address)).call()
+#     with open("./assets/abi/mirror-nft.json") as f:
+#         abi = json.load(f)["result"]
+#     mirror = w3.eth.contract(address=mirror_contract_address, abi=abi)
+#     nft_balance = mirror.functions.balanceOf(w3.to_checksum_address(wallet_address)).call()
 
-    with open("./assets/abi/oshigoto-token.json") as f:
-        abi = json.load(f)["result"]
+#     with open("./assets/abi/oshigoto-token.json") as f:
+#         abi = json.load(f)["result"]
 
-    oshigoto_contract_address = os.environ.get("CONTRACT_ADDRESS_OSHIGOTO_TOKEN")
-    oshigoto_contract = w3.eth.contract(address=oshigoto_contract_address, abi=abi)
-    oshigoto = oshigoto_contract.functions.balanceOf(w3.to_checksum_address(wallet_address)).call()
-    oshigoto_balance = int(oshigoto) / 10**18
+#     oshigoto_contract_address = os.environ.get("CONTRACT_ADDRESS_OSHIGOTO_TOKEN")
+#     oshigoto_contract = w3.eth.contract(address=oshigoto_contract_address, abi=abi)
+#     oshigoto = oshigoto_contract.functions.balanceOf(w3.to_checksum_address(wallet_address)).call()
+#     oshigoto_balance = int(oshigoto) / 10**18
     
-    return {
-        "oshigoto_token_erc721": nft_balance,
-        "oshigoto_token_erc20": oshigoto_balance,
-    }
+#     return {
+#         "oshigoto_token_erc721": nft_balance,
+#         "oshigoto_token_erc20": oshigoto_balance,
+#     }
 
 @app.get("/wallets/")
 def read_root(username: str):
+    salt = w3.solidity_keccak(["string"], [username])   
 
-    w3 = Web3(Web3.HTTPProvider(os.environ.get("PROVIDER_URL")))
-    erc6551_contract_address = os.environ.get("CONTRACT_ADDRESS_ERC6551_REGISTRY")
-    minter_address = w3.to_checksum_address(os.environ.get("MINTER_ADDRESS"))
-    implement_contract_address = w3.to_checksum_address(os.environ.get("CONTRACT_ADDRESS_ERC6551_IMPLEMENTATION"))
+    membership_contract = loaded_contracts.get("oshigoto_membership")
+    erc6551_contract = loaded_contracts.get("erc6551_registry")
 
-    salt = w3.solidity_keccak(["string"], [username])
+    implement_contract_address = os.environ.get("CONTRACT_ADDRESS_ERC6551_IMPLEMENTATION")
 
-    membership_contract_address = w3.to_checksum_address(os.environ.get("CONTRACT_ADDRESS_ALICE_MEMBERSHIP"))
+    tokenID = membership_contract.functions.getTokenIdFromAddress(user_address).call()
 
-    with open("./assets/abi/membership.json") as f:
-        abi = json.load(f)["result"]
-
-    membership_contract = w3.eth.contract(address=membership_contract_address, abi=abi)
-    tokenID = membership_contract.functions.getTokenIdFromAddress(minter_address).call()
-    print(tokenID)
-
-    with open("./assets/abi/erc6551registry.json") as f:
-        abi = json.load(f)["result"]
-
-    contrtact = w3.eth.contract(address=erc6551_contract_address, abi=abi)
-    result = contrtact.functions.account(implement_contract_address,salt, CHAIN_ID, membership_contract_address, tokenID).call()
+    tba_address = erc6551_contract.functions.account(implement_contract_address,salt, CHAIN_ID, membership_contract.address, tokenID).call()
     return {
         "implement_contract_address": implement_contract_address,
         "chain_id": CHAIN_ID,
-        "membership_contract_address": membership_contract_address,
+        "membership_contract_address": membership_contract.address,
         "token_id": tokenID,
         "username": username,
         "salt": salt.hex(),
-        "tba_wallet_address": result,
-        "main_wallet_address": minter_address, 
+        "tba_wallet_address": tba_address,
+        "main_wallet_address": user_address, 
     }
 
-@app.get("/membership/{token_id}")
-def get_membership(token_id: int):
-    config = alice_membership_contrtact.functions.membershipConfigs(token_id).call()
-    tokenURI = alice_membership_contrtact.functions.tokenURI(token_id).call()
+@app.get("/membership/")
+def get_membership():
+    membership_contract = loaded_contracts.get("oshigoto_membership")
+    oshigoto_membership_contract = loaded_contracts.get("oshigoto_membership")
+
+    membership_token_id = membership_contract.functions.getTokenIdFromAddress(user_address).call()
+
+    config = oshigoto_membership_contract.functions.membershipConfigs(membership_token_id).call()
+    tokenURI = oshigoto_membership_contract.functions.tokenURI(membership_token_id).call()
 
     # base64 -> json
     metadata = json.loads(base64.b64decode(tokenURI.split(",")[1]))
@@ -202,7 +182,7 @@ def get_membership(token_id: int):
     last_burned = datetime.datetime.fromtimestamp(config[1])
 
     return {
-        "token_id": token_id,
+        "token_id": membership_token_id,
         "name": metadata["name"],
         "image": metadata["image"],
         "burn_point": config[0],
@@ -211,11 +191,10 @@ def get_membership(token_id: int):
 
 @app.post("/memberships/alice")
 def mint_memberships():
-    account = Account.from_key(user_private_key)
-    from_address = w3.to_checksum_address(account.address)
-    nonce = w3.eth.get_transaction_count(from_address)
+    membership_contrtact = loaded_contracts.get("oshigoto_membership")
+    nonce = w3.eth.get_transaction_count(user_address)
 
-    transaction = alice_membership_contrtact.functions.mintMembership().build_transaction({
+    transaction = membership_contrtact.functions.mintMembership().build_transaction({
         'gas': 200000,  # Estimate gas limit
         'gasPrice': w3.to_wei('10', 'gwei'),  # Estimate gas price
         'nonce': nonce,
@@ -225,20 +204,38 @@ def mint_memberships():
     tx_hash = w3.eth.send_raw_transaction(signed_txn.rawTransaction)
 
     return {
-        "from": from_address,
+        "from": user_address,
         "tx_hash": tx_hash.hex(),
+    }
+
+@app.get("/mirror_nft/{token_id}")
+def get_mirror_nft(token_id: int):
+    mirror_contract = loaded_contracts.get("mirror_nft")
+    oshigoto_token_contract = loaded_contracts.get("oshigoto_token")
+    
+    token_uri = mirror_contract.functions.tokenURI(token_id).call()
+    metadata = json.loads(base64.b64decode(token_uri.split(",")[1]))
+
+    rank = oshigoto_token_contract.functions.rankOf(token_id).call()
+
+    return {
+        "name": metadata["name"],
+        "image": metadata["image"],
+        "rank": rank,
     }
 
 @app.post("/memberships/levelup/{token_id}")
 def levelup_memberships(token_id: int, material_body: MaterialBody):
-    account = Account.from_key(user_private_key)
-    from_address = w3.to_checksum_address(account.address)
-    nonce = w3.eth.get_transaction_count(from_address)
 
-    transaction = alice_membership_contrtact.functions.levelUp(
+    oshigoto_membership_contract = loaded_contracts.get("oshigoto_membership")
+    material_contract_address = os.environ.get("CONTRACT_ADDRESS_MIRROR_NFT")
+
+    nonce = w3.eth.get_transaction_count(user_address)
+
+    transaction = oshigoto_membership_contract.functions.levelUp(
         token_id,
         material_body.material_token_id,
-        material_body.material_contract_address,
+        material_contract_address,
     ).build_transaction({
         'gas': 200000,  # Estimate gas limit
         'gasPrice': w3.to_wei('10', 'gwei'),  # Estimate gas price
@@ -249,6 +246,94 @@ def levelup_memberships(token_id: int, material_body: MaterialBody):
     tx_hash = w3.eth.send_raw_transaction(signed_txn.rawTransaction)
 
     return {
-        "from": from_address,
+        "from": user_address,
+        "tx_hash": tx_hash.hex(),
+    }
+
+@app.post("/metalive_poap/mint/")
+def mint_metalive_poap(username: str, nft_name: str):
+    metalive_poap_contract = loaded_contracts.get("metalive_poap")
+    nonce = w3.eth.get_transaction_count(owner_address)
+
+    # TBA Wallet
+    salt = w3.solidity_keccak(["string"], [username])  
+    membership_contract = loaded_contracts.get("oshigoto_membership")
+    erc6551_contract = loaded_contracts.get("erc6551_registry")
+    implement_contract_address = os.environ.get("CONTRACT_ADDRESS_ERC6551_IMPLEMENTATION")
+    tokenID = membership_contract.functions.getTokenIdFromAddress(user_address).call()
+    tba_address = erc6551_contract.functions.account(implement_contract_address,salt, CHAIN_ID, membership_contract.address, tokenID).call()
+    print(tba_address)
+
+    transaction = metalive_poap_contract.functions.airdrop(
+        tba_address,
+        nft_name,
+    ).build_transaction({
+        'gas': 2000000,  # Estimate gas limit
+        'gasPrice': w3.to_wei('10', 'gwei'),  # Estimate gas price
+        'nonce': nonce,
+    })
+
+    signed_txn = w3.eth.account.sign_transaction(transaction, owner_private_key)
+    tx_hash = w3.eth.send_raw_transaction(signed_txn.rawTransaction)
+
+    return {
+        "from": owner_address,
+        "to": tba_address,
+        "tx_hash": tx_hash.hex(),
+    }
+
+@app.post("/goods/mint/{goods_type}")
+def mint_goods(goods_type: str, username: str):
+    oshigoto_goods_contract = loaded_contracts.get("oshigoto_goods")
+    oshigoto_token_contract = loaded_contracts.get("oshigoto_token")
+    nonce = w3.eth.get_transaction_count(user_address)
+
+    # TBA Wallet
+    salt = w3.solidity_keccak(["string"], [username])  
+    membership_contract = loaded_contracts.get("oshigoto_membership")
+    erc6551_contract = loaded_contracts.get("erc6551_registry")
+    implement_contract_address = os.environ.get("CONTRACT_ADDRESS_ERC6551_IMPLEMENTATION")
+    tokenID = membership_contract.functions.getTokenIdFromAddress(user_address).call()
+    tba_address = erc6551_contract.functions.account(implement_contract_address,salt, CHAIN_ID, membership_contract.address, tokenID).call()
+    print(tba_address)
+
+    # Approve
+    transaction = oshigoto_token_contract.functions.approve(oshigoto_goods_contract.address, oshigoto_token_contract.balanceOf(user_address)).build_transaction({
+        'gas': 200000,  # Estimate gas limit
+        'gasPrice': w3.to_wei('10', 'gwei'),  # Estimate gas price
+        'nonce': nonce,
+    })
+
+    # Mint goods
+    if goods_type == "a":
+        transaction = oshigoto_goods_contract.functions.purchaseGoodsA(tba_address).build_transaction({
+            'gas': 200000,  # Estimate gas limit
+            'gasPrice': w3.to_wei('10', 'gwei'),  # Estimate gas price
+            'nonce': nonce,
+        })
+    elif goods_type == "b":
+        transaction = oshigoto_goods_contract.functions.purchaseGoodsB(tba_address).build_transaction({
+            'gas': 200000,  # Estimate gas limit
+            'gasPrice': w3.to_wei('10', 'gwei'),  # Estimate gas price
+            'nonce': nonce,
+        })
+
+    elif goods_type == "c":
+        transaction = oshigoto_goods_contract.functions.purchaseGoodsC(tba_address).build_transaction({
+            'gas': 200000,  # Estimate gas limit
+            'gasPrice': w3.to_wei('10', 'gwei'),  # Estimate gas price
+            'nonce': nonce,
+        })
+    else:
+        return {
+            "error": "Invalid goods type"
+        }
+
+    signed_txn = w3.eth.account.sign_transaction(transaction, user_private_key)
+    tx_hash = w3.eth.send_raw_transaction(signed_txn.rawTransaction)
+
+    return {
+        "from": user_address,
+        "to": tba_address,
         "tx_hash": tx_hash.hex(),
     }
